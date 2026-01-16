@@ -109,7 +109,7 @@ async def websocket_endpoint(websocket: WebSocket):
         print(f"Generaton config: {max_new_tokens} tokens for {word_count} words")
         
         generated_sequence = []
-        REPETITION_PENALTY = 1.1
+        REPETITION_PENALTY = 1.2
         
         with torch.no_grad():
             for step in range(max_new_tokens):
