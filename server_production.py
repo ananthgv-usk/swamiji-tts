@@ -12,7 +12,7 @@ from snac import SNAC
 
 # Configuration
 BASE_MODEL = "unsloth/orpheus-3b-0.1-ft"
-MOEL_PATH = "/workspace/orpheus_sph_refinement/checkpoint-476"
+MOEL_PATH = "/workspace/orpheus_sph_refinement/checkpoint-450"
 
 # Special Tokens
 START_OF_TEXT = 128000
@@ -25,7 +25,7 @@ START_OF_AI = 128261
 AUDIO_TOKENS_START = 128266
 
 # Streaming Configuration
-FRAMES_PER_CHUNK = 15  # Smaller chunks for lower latency
+FRAMES_PER_CHUNK = 40  # Increased from 15 to reduce overhead (approx 0.12s per chunk)
 GENERATION_BATCH_SIZE = 1  # Keep at 1 for real-time streaming
 
 # Globals
@@ -133,10 +133,15 @@ async def websocket_endpoint(websocket: WebSocket):
                         else:
                             logits[0, token] /= REPETITION_PENALTY
                 
+                # Apply Temperature (Match inference script: 0.6)
+                TEMPERATURE = 0.6
+                logits = logits / TEMPERATURE
+
                 # Apply Top-P Sampling
                 logits = top_p_warper(None, logits)
-
-                probs = torch.softmax(logits / 0.6, dim=-1)  # temperature=0.6
+                
+                # Sample
+                probs = torch.nn.functional.softmax(logits, dim=-1)
                 next_token = torch.multinomial(probs, num_samples=1)
                 
                 # EOS check is irrelevant now as it's banned, but keep for structure if we ever lower the ban
