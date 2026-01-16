@@ -1,0 +1,25 @@
+# Model weights and checkpoints
+orpheus_sph_lora/
+orpheus_sph_refinement/
+unsloth_compiled_cache/
+orpheus_finetune_voice/
+../outputs/
+checkpoint-*/
+
+# Audio files
+*.wav
+*.mp3
+
+# Python/Env
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# Logs
+*.log
+training.pid
+
+# OS files
+.DS_Store

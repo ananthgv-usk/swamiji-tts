@@ -1,0 +1,27 @@
+# Core ML/DL Libraries
+torch>=2.4.0,<2.6.0  # PyTorch 2.4.x for stability (avoid 2.6.0 torchao issues)
+transformers>=4.52.0  # Hugging Face Transformers
+peft>=0.7.0  # Parameter-Efficient Fine-Tuning (LoRA)
+accelerate>=0.24.0  # Training acceleration
+bitsandbytes>=0.41.0  # 8-bit optimizers
+
+# Dataset Processing
+datasets>=2.14.0  # Hugging Face Datasets
+soundfile>=0.12.0  # Audio I/O
+librosa>=0.10.0  # Audio processing
+scipy>=1.10.0  # Scientific computing
+
+# Audio Codec
+snac @ git+https://github.com/hubertsiuzdak/snac.git  # SNAC 24kHz codec
+
+# Web Server (for streaming)
+fastapi>=0.104.0  # FastAPI web framework
+uvicorn>=0.24.0  # ASGI server
+websockets>=12.0  # WebSocket support
+
+# Audio Playback (client-side, optional on server)
+sounddevice>=0.4.6  # Real-time audio playback
+
+# Utilities
+numpy>=1.24.0  # Numerical operations
+tqdm>=4.66.0  # Progress bars
