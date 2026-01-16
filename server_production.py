@@ -104,7 +104,7 @@ async def websocket_endpoint(websocket: WebSocket):
         
         # Auto-calculate max_new_tokens
         word_count = len(prompt.split())
-        calc_tokens = int(word_count * 7.5 * 1.5)
+        calc_tokens = int(word_count * 80)
         max_new_tokens = max(calc_tokens, 500)
         print(f"Generaton config: {max_new_tokens} tokens for {word_count} words")
         
