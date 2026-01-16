@@ -110,7 +110,7 @@ async def websocket_endpoint(websocket: WebSocket):
         print(f"Generaton config: {max_new_tokens} tokens for {word_count} words")
         
         generated_sequence = []
-        REPETITION_PENALTY = 1.1
+        REPETITION_PENALTY = 1.0
         top_p_warper = TopPLogitsWarper(top_p=0.95)
         
         with torch.no_grad():
@@ -133,9 +133,6 @@ async def websocket_endpoint(websocket: WebSocket):
                         else:
                             logits[0, token] /= REPETITION_PENALTY
                 
-                # BAN ALL NON-AUDIO TOKENS (Keep as safety)
-                logits[0, :AUDIO_TOKENS_START] = -float('inf')
-
                 # Apply Top-P Sampling
                 logits = top_p_warper(None, logits)
 
