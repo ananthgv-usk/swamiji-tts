@@ -6,7 +6,7 @@ import asyncio
 import numpy as np
 import soundfile as sf
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoTokenizer, AutoModelForCausalLM, TopPLogitsWarper
 from peft import PeftModel
 from snac import SNAC
 
@@ -21,6 +21,7 @@ START_OF_SPEECH = 128257
 END_OF_SPEECH = 128258
 START_OF_HUMAN = 128259
 END_OF_HUMAN = 128260
+START_OF_AI = 128261
 AUDIO_TOKENS_START = 128266
 
 # Streaming Configuration
@@ -94,7 +95,7 @@ async def websocket_endpoint(websocket: WebSocket):
         input_ids = tokenizer(prompt, return_tensors="pt").input_ids
         start_token = torch.tensor([[START_OF_HUMAN]])
         end_tokens = torch.tensor([[END_OF_TEXT, END_OF_HUMAN]])
-        input_ids = torch.cat([start_token, input_ids, end_tokens], dim=1).to("cuda")
+        input_ids = torch.cat([start_token, input_ids, end_tokens, torch.tensor([[START_OF_AI, START_OF_SPEECH]])], dim=1).to("cuda")
         
         # Generation loop WITHOUT threading - direct async generation
         audio_tokens_buffer = []
@@ -109,7 +110,8 @@ async def websocket_endpoint(websocket: WebSocket):
         print(f"Generaton config: {max_new_tokens} tokens for {word_count} words")
         
         generated_sequence = []
-        REPETITION_PENALTY = 1.2
+        REPETITION_PENALTY = 1.1
+        top_p_warper = TopPLogitsWarper(top_p=0.95)
         
         with torch.no_grad():
             for step in range(max_new_tokens):
@@ -131,12 +133,19 @@ async def websocket_endpoint(websocket: WebSocket):
                         else:
                             logits[0, token] /= REPETITION_PENALTY
                 
+                # BAN ALL NON-AUDIO TOKENS (Keep as safety)
+                logits[0, :AUDIO_TOKENS_START] = -float('inf')
+
+                # Apply Top-P Sampling
+                logits = top_p_warper(None, logits)
+
                 probs = torch.softmax(logits / 0.6, dim=-1)  # temperature=0.6
                 next_token = torch.multinomial(probs, num_samples=1)
                 
-                # Check for EOS
+                # EOS check is irrelevant now as it's banned, but keep for structure if we ever lower the ban
                 if next_token.item() == END_OF_SPEECH:
-                    break
+                     print("EOS (impossible?)")
+
                 
                 # Update for next iteration
                 input_ids = next_token
