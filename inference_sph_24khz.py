@@ -12,11 +12,14 @@ import argparse
 import os
 
 # Special tokens (matching reference and training)
-START_OF_HUMAN = 128259
+START_OF_TEXT = 128000
 END_OF_TEXT = 128009
-END_OF_HUMAN = 128260
 START_OF_SPEECH = 128257
 END_OF_SPEECH = 128258
+START_OF_HUMAN = 128259
+END_OF_HUMAN = 128260
+START_OF_AI = 128261
+END_OF_AI = 128262
 PAD_TOKEN = 128263
 AUDIO_TOKENS_START = 128266
 
@@ -123,24 +126,24 @@ def main():
     snac_model.eval()
     print("✓ SNAC model loaded")
     
-    # Prepare input (matching reference implementation)
+    # Prepare input (matching training format)
     print("\nPreparing input...")
     
     # Tokenize prompt (includes BOS automatically)
-    input_ids = tokenizer(args.prompt, return_tensors="pt").input_ids
+    text_ids = tokenizer.encode(args.prompt, add_special_tokens=True)
+    text_ids.append(END_OF_TEXT)
     
-    # Add special tokens
-    start_token = torch.tensor([[START_OF_HUMAN]], dtype=torch.int64)
-    end_tokens = torch.tensor([[END_OF_TEXT, END_OF_HUMAN]], dtype=torch.int64)
+    # Construct full prompt sequence
+    prompt_ids = (
+        [START_OF_HUMAN] +
+        text_ids +
+        [END_OF_HUMAN] +
+        [START_OF_AI] +
+        [START_OF_SPEECH]
+    )
     
-    modified_input_ids = torch.cat([start_token, input_ids, end_tokens], dim=1)
-    
-    # Pad if needed (for batch processing, not needed for single prompt)
-    padded_tensor = modified_input_ids
-    attention_mask = torch.ones_like(padded_tensor)
-    
-    input_ids = padded_tensor.to(device)
-    attention_mask = attention_mask.to(device)
+    input_ids = torch.tensor([prompt_ids], dtype=torch.int64).to(device)
+    attention_mask = torch.ones_like(input_ids).to(device)
     
     # Auto-calculate max_new_tokens if not specified or default
     if args.max_tokens == 2000: # Default value
@@ -172,38 +175,26 @@ def main():
     # Extract audio codes
     print("\nExtracting audio codes...")
     
-    # Find START_OF_SPEECH token
-    token_indices = (generated_ids == START_OF_SPEECH).nonzero(as_tuple=True)
+    # Audio codes start after the prompt we provided
+    start_idx = len(prompt_ids)
+    generated_tokens = generated_ids[0, start_idx:]
     
-    if len(token_indices[1]) > 0:
-        last_occurrence_idx = token_indices[1][-1].item()
-        cropped_tensor = generated_ids[:, last_occurrence_idx + 1:]
-    else:
-        print("⚠️ START_OF_SPEECH not found, using full output")
-        cropped_tensor = generated_ids
+    # Filter out non-audio tokens (like END_OF_SPEECH or END_OF_AI if generated)
+    # And keep only tokens that are >= AUDIO_TOKENS_START
+    audio_tokens = [t.item() for t in generated_tokens if t.item() >= AUDIO_TOKENS_START]
     
-    # Remove END_OF_SPEECH tokens
-    mask = cropped_tensor != END_OF_SPEECH
-    processed_rows = []
-    for row in cropped_tensor:
-        masked_row = row[row != END_OF_SPEECH]
-        processed_rows.append(masked_row)
-    
-    # Trim to multiple of 7 and subtract offset
-    code_lists = []
-    for row in processed_rows:
-        row_length = row.size(0)
-        new_length = (row_length // 7) * 7
-        trimmed_row = row[:new_length]
-        trimmed_row = [t.item() - AUDIO_TOKENS_START for t in trimmed_row]
-        code_lists.append(trimmed_row)
-    
-    if not code_lists or len(code_lists[0]) == 0:
-        print("❌ No audio codes generated!")
+    # Trim to multiple of 7 (SNAC frames)
+    num_frames = len(audio_tokens) // 7
+    if num_frames == 0:
+        print("❌ No valid audio frames generated!")
         return
+
+    trimmed_audio_tokens = audio_tokens[:num_frames * 7]
+
+    # Subtract offset to get raw SNAC codes
+    codes = [t - AUDIO_TOKENS_START for t in trimmed_audio_tokens]
     
-    codes = code_lists[0]
-    print(f"  Extracted {len(codes)} codes ({len(codes) // 7} frames)")
+    print(f"  Extracted {len(codes)} codes ({num_frames} frames)")
     
     # Redistribute and decode
     print("\nDecoding audio...")

@@ -12,7 +12,7 @@ from snac import SNAC
 
 # Configuration
 BASE_MODEL = "unsloth/orpheus-3b-0.1-ft"
-MOEL_PATH = "/workspace/orpheus_sph_refinement/checkpoint-450"
+MODEL_PATH = "/workspace/orpheus_sph_refinement/checkpoint-450"
 
 # Special Tokens
 START_OF_TEXT = 128000
@@ -47,7 +47,7 @@ async def startup_event():
         attn_implementation="sdpa"
     )
     tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL)
-    model = PeftModel.from_pretrained(base_model, MOEL_PATH)
+    model = PeftModel.from_pretrained(base_model, MODEL_PATH)
     model.eval()
     
     # Verify GPU placement
@@ -91,11 +91,18 @@ async def websocket_endpoint(websocket: WebSocket):
         prompt = await websocket.receive_text()
         print(f"Generating for: {prompt}")
         
-        # Prepare Input
-        input_ids = tokenizer(prompt, return_tensors="pt").input_ids
-        start_token = torch.tensor([[START_OF_HUMAN]])
-        end_tokens = torch.tensor([[END_OF_TEXT, END_OF_HUMAN]])
-        input_ids = torch.cat([start_token, input_ids, end_tokens, torch.tensor([[START_OF_AI, START_OF_SPEECH]])], dim=1).to("cuda")
+        # Prepare Input (matching training format)
+        text_ids = tokenizer.encode(prompt, add_special_tokens=True)
+        text_ids.append(END_OF_TEXT)
+
+        prompt_ids = (
+            [START_OF_HUMAN] +
+            text_ids +
+            [END_OF_HUMAN] +
+            [START_OF_AI] +
+            [START_OF_SPEECH]
+        )
+        input_ids = torch.tensor([prompt_ids], dtype=torch.int64).to("cuda")
         
         # Generation loop WITHOUT threading - direct async generation
         audio_tokens_buffer = []
@@ -138,7 +145,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 logits = logits / TEMPERATURE
 
                 # Apply Top-P Sampling
-                logits = top_p_warper(None, logits)
+                logits = top_p_warper(input_ids, logits)
                 
                 # Sample
                 probs = torch.nn.functional.softmax(logits, dim=-1)

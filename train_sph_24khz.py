@@ -13,7 +13,7 @@ import os
 MODEL_NAME = "unsloth/orpheus-3b-0.1-ft"
 DATASET_PATH = "/workspace/preprocessed_dataset_sph_24khz"
 OUTPUT_DIR = "/workspace/orpheus_sph_lora"
-MOEL_PATH = "/workspace/orpheus_sph_lora/checkpoint-119"
+MODEL_PATH = "/workspace/orpheus_sph_lora/checkpoint-119"
 MAX_SEQ_LENGTH = 2048
 
 # Special tokens (matching reference implementation)
@@ -62,8 +62,8 @@ print("\nAdding LoRA adapters...")
 model.enable_input_require_grads()  # <--- Critical for gradient checkpointing + LoRA!
 
 # Load LoRA from existing checkpoint
-print(f"\nLoading LoRA adapters from {MOEL_PATH} for refinement...")
-model = PeftModel.from_pretrained(model, MOEL_PATH, is_trainable=True)
+print(f"\nLoading LoRA adapters from {MODEL_PATH} for refinement...")
+model = PeftModel.from_pretrained(model, MODEL_PATH, is_trainable=True)
 # model.print_trainable_parameters()
 print("✓ Base state loaded from checkpoint-119")
 print("✓ LoRA adapters added")
@@ -100,22 +100,29 @@ def create_input_ids(example):
     text_ids = tokenizer.encode(example["text"], add_special_tokens=True)
     text_ids.append(END_OF_TEXT)
     
-    example["text_tokens"] = text_ids
-    
-    # Construct full sequence
-    input_ids = (
+    # Construct prompt part
+    prompt_ids = (
         [START_OF_HUMAN] +
-        example["text_tokens"] +
+        text_ids +
         [END_OF_HUMAN] +
         [START_OF_AI] +
-        [START_OF_SPEECH] +
+        [START_OF_SPEECH]
+    )
+
+    # Construct audio part
+    audio_ids = (
         example["codes_list"] +
         [END_OF_SPEECH] +
         [END_OF_AI]
     )
     
+    input_ids = prompt_ids + audio_ids
+
+    # Mask labels for prompt part (-100 is ignored by CrossEntropyLoss)
+    labels = [-100] * len(prompt_ids) + audio_ids
+
     example["input_ids"] = input_ids
-    example["labels"] = input_ids.copy()  # Causal LM: labels = inputs
+    example["labels"] = labels
     example["attention_mask"] = [1] * len(input_ids)
     
     return example
@@ -149,8 +156,8 @@ training_args = TrainingArguments(
     per_device_train_batch_size=BATCH_SIZE,
     gradient_accumulation_steps=GRAD_ACCUM,
     warmup_steps=5,
-    num_train_epochs=4, # 4 more epochs for refinement# Increased to match reference (5e-6 was too low)
-    learning_rate=2e-4, # Increased to match reference (5e-6 was too low)
+    num_train_epochs=4, # 4 more epochs for refinement
+    learning_rate=2e-4, # Optimized learning rate for LoRA
     logging_steps=1,
     optim="adamw_8bit",
     weight_decay=0.001,
@@ -186,8 +193,8 @@ print("=" * 60)
 
 # Train
 print("\nStarting training...")
-print(f"Training for 4 epochs (~{STEPS_PER_EPOCH * 4} steps) starting from checkpoint-119 weights")
-print(f"Using conservative learning rate: 5e-6")
+print(f"Training for {training_args.num_train_epochs} epochs (~{STEPS_PER_EPOCH * training_args.num_train_epochs} steps) starting from checkpoint-119 weights")
+print(f"Using learning rate: {training_args.learning_rate}")
 print("Checkpoints will be saved every 50 steps")
 print("=" * 60)
 
