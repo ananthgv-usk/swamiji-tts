@@ -22,7 +22,7 @@ AUDIO_TOKENS_START = 128266
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Orpheus TTS Inference (24kHz)")
-    parser.add_argument("--model_path", type=str, default="/workspace/orpheus_sph_lora",
+    parser.add_argument("--model_path", type=str, default="/workspace/orpheus_sph_refinement/checkpoint-450",
                         help="Path to trained model adapters")
     parser.add_argument("--base_model", type=str, default="unsloth/orpheus-3b-0.1-ft",
                         help="Base model name")
@@ -31,7 +31,7 @@ def parse_args():
                         help="Text prompt to generate speech for")
     parser.add_argument("--output", type=str, default="generated_audio.wav",
                         help="Output audio file path")
-    parser.add_argument("--max_tokens", type=int, default=1200,
+    parser.add_argument("--max_tokens", type=int, default=4096,
                         help="Maximum tokens to generate")
     parser.add_argument("--temperature", type=float, default=0.6,
                         help="Sampling temperature")
